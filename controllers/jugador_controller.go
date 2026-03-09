@@ -1,38 +1,45 @@
 package controllers
 
 import (
+	"api-jugadores/db"
 	"api-jugadores/models"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 )
 
-var jugadores = []models.Jugador{
-	{
-		ID:       1,
-		Nombre:   "Patricio Frettes",
-		Posicion: "Volante",
-		Edad:     24,
-	},
-	{
-		ID:       2,
-		Nombre:   "Rodrigo Cordoba",
-		Posicion: "Defensor",
-		Edad:     25,
-	},
-}
-
 func ManejarJugadores(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
+		filas, err := db.DB.Query("SELECT id, nombre, posicion, edad FROM jugadores")
+		if err != nil {
+			http.Error(w, "Error al consultar la base de datos", http.StatusInternalServerError)
+			return
+		}
+		defer filas.Close()
+
+		var jugadores []models.Jugador
+
+		for filas.Next() {
+			var jugador models.Jugador
+			filas.Scan(&jugador.ID, &jugador.Nombre, &jugador.Posicion, &jugador.Edad)
+			jugadores = append(jugadores, jugador)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(jugadores)
 	} else if r.Method == "POST" {
 		var nuevoJugador models.Jugador
 		json.NewDecoder(r.Body).Decode(&nuevoJugador)
-		jugadores = append(jugadores, nuevoJugador)
+		_, err := db.DB.Exec("INSERT INTO jugadores (nombre, posicion, edad) VALUES (?, ?, ?)", nuevoJugador.Nombre, nuevoJugador.Posicion, nuevoJugador.Edad)
+		if err != nil {
+			http.Error(w, "Error al guardar en la base de datos", http.StatusInternalServerError)
+			return
+		}
+
 		w.WriteHeader(http.StatusCreated)
-		fmt.Fprintf(w, "Jugador agregado al plantel")
+		fmt.Fprintf(w, "¡Jugador agregado al plantel de Fuerte Apache en MySQL!")
 	}
 }
 
@@ -43,37 +50,46 @@ func BuscarJugador(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "El ID debe ser un número", http.StatusBadRequest)
 		return
 	}
+
 	if r.Method == "GET" {
-		for _, jugador := range jugadores {
-			if jugador.ID == idNumero {
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(jugador)
-				return
+		var jugador models.Jugador
+		err := db.DB.QueryRow("SELECT id, nombre, posicion, edad FROM jugadores WHERE id = ?", idNumero).Scan(&jugador.ID, &jugador.Nombre, &jugador.Posicion, &jugador.Edad)
+
+		if err != nil {
+			if err == sql.ErrNoRows {
+				http.Error(w, "Jugador no encontrado en el plantel", http.StatusNotFound)
+			} else {
+				http.Error(w, "Error al buscar en la base de datos", http.StatusInternalServerError)
 			}
+			return
 		}
-		http.Error(w, "Jugador no encontrado en el plantel", http.StatusNotFound)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(jugador)
+
 	} else if r.Method == "PUT" {
 		var jugadorActualizado models.Jugador
 		json.NewDecoder(r.Body).Decode(&jugadorActualizado)
-		for i, jugador := range jugadores {
-			if jugador.ID == idNumero {
-				jugadorActualizado.ID = jugador.ID
-				jugadores[i] = jugadorActualizado
-				w.WriteHeader(http.StatusOK)
-				fmt.Fprintf(w, "Jugador actualizado con éxito")
-				return
-			}
+
+		_, err := db.DB.Exec("UPDATE jugadores SET nombre = ?, posicion = ?, edad = ? WHERE id = ?",
+			jugadorActualizado.Nombre, jugadorActualizado.Posicion, jugadorActualizado.Edad, idNumero)
+
+		if err != nil {
+			http.Error(w, "Error al actualizar en la base de datos", http.StatusInternalServerError)
+			return
 		}
-		http.Error(w, "Jugador no encontrado para actualizar", http.StatusNotFound)
+
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Jugador actualizado con éxito")
+
 	} else if r.Method == "DELETE" {
-		for i, jugador := range jugadores {
-			if jugador.ID == idNumero {
-				jugadores = append(jugadores[:i], jugadores[i+1:]...)
-				w.WriteHeader(http.StatusOK)
-				fmt.Fprintf(w, "Jugador eliminado del plantel")
-				return
-			}
+		_, err := db.DB.Exec("DELETE FROM jugadores WHERE id = ?", idNumero)
+		if err != nil {
+			http.Error(w, "Error al eliminar en la base de datos", http.StatusInternalServerError)
+			return
 		}
-		http.Error(w, "Jugador no encontrado para eliminar", http.StatusNotFound)
+
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Jugador eliminado del plantel")
 	}
 }
