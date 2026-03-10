@@ -5,4 +5,5 @@ type Jugador struct {
 	Nombre   string `json:"nombre"`
 	Posicion string `json:"posicion"`
 	Edad     int    `json:"edad"`
+	Foto     string `json:"foto"`
 }

@@ -1,5 +1,3 @@
-# Ejecutables de Windows
-*.exe
-
-# Archivos de MacOS (por si algún compañero usa Mac)
-.DS_Store
+/api-jugadores
+.env
+/uploads/
